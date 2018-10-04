@@ -110,7 +110,7 @@ class UcsVersion(object):
         if self.__major != version.major:
             return ord(self.__major) - ord(version.major)
         if self.__minor != version.minor:
-            return ord(self.__minor) - ord(version.major)
+            return ord(self.__minor) - ord(version.minor)
         if self.__mr != version.mr:
             return ord(self.__mr) - ord(version.mr)
         return ord(self.__patch) - ord(version.patch)
@@ -126,6 +126,9 @@ class UcsVersion(object):
 
     def __le__(self, version):
         return self.compare_to(version) <= 0
+
+    def __eq__(self, version):
+        return self.compare_to(version) == 0
 
     def __str__(self):
         return self.__version

@@ -1,4 +1,4 @@
-# Copyright 2015 Cisco Systems, Inc.
+# Copyright 2017 Cisco Systems, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,14 +18,12 @@ import sys
 import socket
 import ssl
 
-try:
-    import urllib2
-    import httplib
-    from urllib2 import HTTPError
-except:
-    import urllib.request as urllib2
-    import http.client as httplib
-    from urllib.error import HTTPError
+from six.moves import urllib as urllib2
+from six.moves import http_client as httplib
+from six.moves.urllib import request as Request
+from six.moves.urllib.error import HTTPError
+from six.moves.urllib.request import HTTPRedirectHandler, HTTPSHandler
+
 
 
 import logging
@@ -33,7 +31,7 @@ import logging
 log = logging.getLogger('ucs')
 
 
-class SmartRedirectHandler(urllib2.HTTPRedirectHandler):
+class SmartRedirectHandler(HTTPRedirectHandler):
     """This class is to handle redirection error."""
 
     def http_error_301(self, req, fp, code, msg, headers):
@@ -47,11 +45,11 @@ class SmartRedirectHandler(urllib2.HTTPRedirectHandler):
         return resp_status
 
 
-class TLSHandler(urllib2.HTTPSHandler):
+class TLSHandler(HTTPSHandler):
     """Like HTTPSHandler but more specific"""
 
     def __init__(self):
-        urllib2.HTTPSHandler.__init__(self)
+        HTTPSHandler.__init__(self)
 
     def https_open(self, req):
         return self.do_open(TLSConnection, req)
@@ -96,11 +94,11 @@ class TLSConnection(httplib.HTTPSConnection):
                                         ssl_version=ssl.PROTOCOL_TLSv1)
 
 
-class TLS1Handler(urllib2.HTTPSHandler):
+class TLS1Handler(HTTPSHandler):
     """Like HTTPSHandler but more specific"""
 
     def __init__(self):
-        urllib2.HTTPSHandler.__init__(self)
+        HTTPSHandler.__init__(self)
 
     def https_open(self, req):
         return self.do_open(TLS1Connection, req)
@@ -155,7 +153,7 @@ class UcsDriver(object):
     def update_handlers(self, tls_proto=None):
         self.__handlers = self.__get_handlers(tls_proto)
 
-    def __get_handlers(self, tls_proto="tlsv1"):
+    def __get_handlers(self, tls_proto=None):
         """
         Internal method to handle redirection and use TLS protocol.
         """
@@ -225,7 +223,7 @@ class UcsDriver(object):
             web request object
         """
 
-        request_ = urllib2.Request(url=uri, data=data)
+        request_ = Request.Request(url=uri, data=data)
         headers = self.__headers
         for header in headers:
             request_.add_header(header, headers[header])
@@ -234,7 +232,7 @@ class UcsDriver(object):
     def get(self, uri):
         pass
 
-    def post(self, uri, data=None, dump_xml=False, read=True):
+    def post(self, uri, data=None, dump_xml=False, read=True, timeout=None):
         """
         sends the web request and receives the response from ucsm server
 
@@ -243,6 +241,7 @@ class UcsDriver(object):
             data (str): request data to send via post request
             dump_xml (bool): if True, displays request and response
             read (bool): if True, returns response.read() else returns object.
+            timeout (int): if set, this will be used as timeout in secs for urllib2
 
         Returns:
             response xml string or response object
@@ -258,17 +257,17 @@ class UcsDriver(object):
             if dump_xml:
                 log.debug('%s ====> %s' % (uri, data))
 
-            opener = urllib2.build_opener(*self.__handlers)
+            opener = Request.build_opener(*self.__handlers)
             try:
-                response = opener.open(request)
+                response = opener.open(request, timeout=timeout)
             except Exception as e:
                 if "SSL".lower() not in str(e).lower():
                     raise
 
                 # Fallback to TLSv1 for this server
                 self.update_handlers(tls_proto="tlsv1")
-                opener = urllib2.build_opener(*self.__handlers)
-                response = opener.open(request)
+                opener = Request.build_opener(*self.__handlers)
+                response = opener.open(request, timeout=timeout)
 
             if type(response) is list:
                 if len(response) == 2 and \
@@ -280,8 +279,8 @@ class UcsDriver(object):
                     if dump_xml:
                         log.debug('%s <==== %s' % (uri, data))
 
-                    opener = urllib2.build_opener(*self.__handlers)
-                    response = opener.open(request)
+                    opener = Request.build_opener(*self.__handlers)
+                    response = opener.open(request, timeout=timeout)
                     # response = urllib2.urlopen(request)
             if read:
                 response = response.read().decode('utf-8')
